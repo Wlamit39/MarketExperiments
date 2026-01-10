@@ -1,0 +1,7 @@
+asgiref
+Django==4.2.27
+kiteconnect==3.9.0
+channels==4.0.0
+djangorestframework==3.15.0
+python-dotenv==1.0.1
+

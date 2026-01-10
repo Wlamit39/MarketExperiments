@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #0056b3; }
+        .positions-table, .rules-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .positions-table th, .rules-table th { background-color: #e2e6ea; padding: 10px; border: 1px solid #ddd; text-align: left; }
+        .positions-table td, .rules-table td { padding: 8px; border: 1px solid #ddd; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input[type="text"], .form-group input[type="number"], .form-group input[type="checkbox"] {
+            width: calc(100% - 10px);
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        .form-group input[type="checkbox"] { width: auto; margin-right: 10px; }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover { background-color: #0056b3; }
+        .message { margin-top: 15px; padding: 10px; border-radius: 4px; }
+        .message.success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .message.error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Trading Dashboard</h1>
+
+        <h2>Open Positions</h2>
+        <div id="positions-message" class="message"></div>
+        <table class="positions-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Instrument Token</th>
+                    <th>Quantity</th>
+                    <th>Avg Price</th>
+                    <th>Last Price</th>
+                    <th>P&L</th>
+                    <th>Is Option</th>
+                </tr>
+            </thead>
+            <tbody id="positions-body">
+                <tr><td colspan="7">Loading positions...</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Create New Square-Off Rule</h2>
+        <div id="rule-message" class="message"></div>
+        <form id="create-rule-form">
+            <div class="form-group">
+                <label for="symbol">Symbol:</label>
+                <input type="text" id="symbol" name="symbol" required>
+            </div>
+            <div class="form-group">
+                <label for="instrument_token">Instrument Token:</label>
+                <input type="number" id="instrument_token" name="instrument_token" required>
+            </div>
+            <div class="form-group">
+                <label for="lower_limit_price">Lower Limit Price (Optional):</label>
+                <input type="number" step="0.01" id="lower_limit_price" name="lower_limit_price">
+            </div>
+            <div class="form-group">
+                <label for="upper_limit_price">Upper Limit Price (Optional):</label>
+                <input type="number" step="0.01" id="upper_limit_price" name="upper_limit_price">
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="active" name="active" checked>
+                <label for="active">Active</label>
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="dry_run" name="dry_run" checked>
+                <label for="dry_run">Dry Run</label>
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="kill_switch" name="kill_switch">
+                <label for="kill_switch">Kill Switch</label>
+            </div>
+            <button type="submit">Create Rule</button>
+        </form>
+
+        <h2>Existing Square-Off Rules</h2>
+        <table class="rules-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Symbol</th>
+                    <th>Instrument Token</th>
+                    <th>Lower Limit</th>
+                    <th>Upper Limit</th>
+                    <th>Active</th>
+                    <th>Triggered Today</th>
+                    <th>Dry Run</th>
+                    <th>Kill Switch</th>
+                </tr>
+            </thead>
+            <tbody id="rules-body">
+                <tr><td colspan="9">Loading rules...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const positionsBody = document.getElementById('positions-body');
+            const rulesBody = document.getElementById('rules-body');
+            const positionsMessage = document.getElementById('positions-message');
+            const ruleMessage = document.getElementById('rule-message');
+            const createRuleForm = document.getElementById('create-rule-form');
+
+            // Function to fetch and display open positions
+            async function fetchPositions() {
+                positionsMessage.textContent = '';
+                try {
+                    const response = await fetch('/api/trade/positions/');
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        positionsMessage.className = 'message error';
+                        positionsMessage.textContent = `Error: ${data.error || 'Failed to fetch positions'}`;
+                        positionsBody.innerHTML = `<tr><td colspan="7">Error loading positions.</td></tr>`;
+                        return;
+                    }
+
+                    positionsBody.innerHTML = ''; // Clear previous data
+                    if (data.length === 0) {
+                        positionsBody.innerHTML = `<tr><td colspan="7">No open positions.</td></tr>`;
+                        return;
+                    }
+
+                    data.forEach(position => {
+                        const row = positionsBody.insertRow();
+                        row.insertCell().textContent = position.tradingsymbol;
+                        row.insertCell().textContent = position.instrument_token;
+                        row.insertCell().textContent = position.quantity;
+                        row.insertCell().textContent = parseFloat(position.average_price).toFixed(2);
+                        row.insertCell().textContent = parseFloat(position.last_price).toFixed(2);
+                        row.insertCell().textContent = parseFloat(position.pnl).toFixed(2);
+                        row.insertCell().textContent = position.is_option ? 'Yes' : 'No';
+                    });
+                } catch (error) {
+                    console.error('Error fetching positions:', error);
+                    positionsMessage.className = 'message error';
+                    positionsMessage.textContent = 'Network error or API is unreachable.';
+                    positionsBody.innerHTML = `<tr><td colspan="7">Error loading positions.</td></tr>`;
+                }
+            }
+
+            // Function to fetch and display existing square-off rules (from Django admin list API, not yet implemented)
+            async function fetchRules() {
+                // For simplicity, we'll fetch directly from Django admin's default list API
+                // In a production setup, you'd have a dedicated DRF API for listing rules.
+                try {
+                    const response = await fetch('/admin/trading/squareoffrule/?_format=json'); // Using Django admin's undocumented JSON API
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        rulesBody.innerHTML = `<tr><td colspan="9">Error loading rules.</td></tr>`;
+                        console.error('Failed to fetch rules:', data);
+                        return;
+                    }
+
+                    rulesBody.innerHTML = '';
+                    if (data.results && data.results.length === 0) {
+                        rulesBody.innerHTML = `<tr><td colspan="9">No square-off rules defined.</td></tr>`;
+                        return;
+                    }
+
+                    (data.results || data).forEach(rule => { // Adjust based on whether 'results' key exists
+                        const row = rulesBody.insertRow();
+                        row.insertCell().textContent = rule.id;
+                        row.insertCell().textContent = rule.symbol;
+                        row.insertCell().textContent = rule.instrument_token;
+                        row.insertCell().textContent = rule.lower_limit_price ? parseFloat(rule.lower_limit_price).toFixed(2) : '-';
+                        row.insertCell().textContent = rule.upper_limit_price ? parseFloat(rule.upper_limit_price).toFixed(2) : '-';
+                        row.insertCell().textContent = rule.active ? 'Yes' : 'No';
+                        row.insertCell().textContent = rule.triggered_today ? 'Yes' : 'No';
+                        row.insertCell().textContent = rule.dry_run ? 'Yes' : 'No';
+                        row.insertCell().textContent = rule.kill_switch ? 'Yes' : 'No';
+                    });
+                } catch (error) {
+                    console.error('Error fetching rules:', error);
+                    rulesBody.innerHTML = `<tr><td colspan="9">Error loading rules. (Make sure Django admin is running and you are logged in if using /admin/ URL)</td></tr>`;
+                }
+            }
+
+
+            // Handle form submission for creating a new rule
+            createRuleForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                ruleMessage.textContent = ''; // Clear previous messages
+
+                const formData = new FormData(createRuleForm);
+                const data = {
+                    symbol: formData.get('symbol'),
+                    instrument_token: parseInt(formData.get('instrument_token')),
+                    lower_limit_price: formData.get('lower_limit_price') || null,
+                    upper_limit_price: formData.get('upper_limit_price') || null,
+                    active: formData.get('active') === 'on',
+                    dry_run: formData.get('dry_run') === 'on',
+                    kill_switch: formData.get('kill_switch') === 'on',
+                };
+
+                // Remove null values if they are empty strings
+                for (const key in data) {
+                    if (data[key] === '') {
+                        data[key] = null;
+                    }
+                }
+                if (data.lower_limit_price !== null) data.lower_limit_price = parseFloat(data.lower_limit_price);
+                if (data.upper_limit_price !== null) data.upper_limit_price = parseFloat(data.upper_limit_price);
+
+
+                try {
+                    const response = await fetch('/api/trade/rules/create/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken') // Include CSRF token
+                        },
+                        body: JSON.stringify(data),
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        ruleMessage.className = 'message success';
+                        ruleMessage.textContent = `Rule created successfully! ID: ${result.id}`;
+                        createRuleForm.reset(); // Clear form
+                        fetchRules(); // Refresh rules list
+                    } else {
+                        ruleMessage.className = 'message error';
+                        ruleMessage.textContent = `Error creating rule: ${JSON.stringify(result)}`;
+                    }
+                } catch (error) {
+                    console.error('Error creating rule:', error);
+                    ruleMessage.className = 'message error';
+                    ruleMessage.textContent = 'Network error or API is unreachable.';
+                }
+            });
+
+            // Helper function to get CSRF token
+            function getCookie(name) {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+
+            // Initial fetches
+            fetchPositions();
+            fetchRules();
+            // Refresh every 30 seconds
+            setInterval(fetchPositions, 30000);
+            setInterval(fetchRules, 30000);
+        });
+    </script>
+</body>
+</html>
+
