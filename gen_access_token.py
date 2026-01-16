@@ -1,8 +1,8 @@
 from kiteconnect import KiteConnect
 import os
 
-API_KEY = os.environ.get("KITE_API_KEY")
-API_SECRET = os.environ.get("KITE_ACCESS_TOKEN")
+API_KEY = "n5r5fn7u84xxllmx"
+API_SECRET =  "jfm8fwtu1hiak1ubih9ykpz12h1lz7ev"
 
 kite = KiteConnect(api_key=API_KEY)
 
